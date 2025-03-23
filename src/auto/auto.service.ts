@@ -1,4 +1,4 @@
-import { Injectable, OnModuleInit, Inject } from '@nestjs/common';
+import { Injectable, Inject } from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { readFileSync, readdirSync } from 'fs';
 import { join } from 'path';
@@ -12,14 +12,19 @@ import {
 } from './auto.types';
 
 @Injectable()
-export class AutoService implements OnModuleInit {
+export class AutoService {
   private autoData: Map<string, MakeData> = new Map();
-  private readonly dataPath = join(process.cwd(), './data');
+  private readonly dataPath = join(__dirname, '../data');
+  private isLoaded = false;
 
   constructor(@Inject(CACHE_MANAGER) private cacheManager: Cache) {}
 
-  onModuleInit() {
+  private loadDataOnce(): void {
+    if (this.isLoaded) return;
+
+    // 👇 Lade nur beim ersten Zugriff
     this.loadAllAutoData();
+    this.isLoaded = true;
   }
 
   private loadAllAutoData(): void {
@@ -57,14 +62,17 @@ export class AutoService implements OnModuleInit {
   }
 
   getAllMakes(): string[] {
+    this.loadDataOnce();
     return Array.from(this.autoData.keys());
   }
 
   getMakeDetails(make: string): MakeData | undefined {
+    this.loadDataOnce();
     return this.autoData.get(make.toLowerCase());
   }
 
   async getModelsByMake(make: string): Promise<Model[]> {
+    this.loadDataOnce();
     const cacheKey = `models_${make.toLowerCase()}`;
     const cachedData = await this.cacheManager.get<Model[]>(cacheKey);
 
@@ -106,6 +114,8 @@ export class AutoService implements OnModuleInit {
   searchAutoDetails(query: string): SearchResult[] {
     const results: SearchResult[] = [];
     const searchTerm = query.toLowerCase();
+
+    this.loadDataOnce();
 
     for (const [make, makeData] of this.autoData.entries()) {
       if (!makeData.models) continue;
